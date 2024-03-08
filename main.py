@@ -16,9 +16,28 @@ from yoloV5_face.utils.utils import *
 from silentFace_model.predict_net import *
 from silentFace_model.predict_net import AntiSpoofPredict
 
+import subprocess
+
 #训练时候train保存的路径和yoloV5_face/model以及yoloV5_face/utils 同一路径，所以main加载权重的时候会出现路径错误，加上这段就好了。
 import sys
 sys.path.append("./yoloV5_face")
+
+command = ['ffmpeg',
+    '-y', '-an',            # 无需询问即可覆盖输出文件
+    '-f', 'rawvideo',       # 强制输入或输出文件格式
+    '-vcodec','rawvideo',   # 设置视频编解码器。这是-codec:v的别名
+    '-pix_fmt', 'bgr24',    # 设置像素格式
+    '-s', '640x384',          # 设置图像大小
+    '-r', '30',             # 设置帧率
+    '-i', '-',              # 输入
+    '-c:v', 'libx264',      # 编解码器
+    '-pix_fmt', 'yuv420p',  # 像素格式
+    '-preset', 'ultrafast', # 调节编码速度和质量的平衡
+    '-f', 'flv',            # 强制输入或输出文件格式
+    '-tune', 'zerolatency', # 视频类型和视觉优化
+    "rtmp://127.0.0.1:1935/live/streaming"]
+# http://127.0.0.1:8090/live/streaming.flv
+pipe = subprocess.Popen(command, shell=False, stdin=subprocess.PIPE)
 
 def cv2_letterbox_image(image, expected_size):
     ih, iw = image.shape[0:2]
@@ -60,6 +79,7 @@ def get_featuresdict(model, dir):
         image = load_image(f"pic/{each}")
         data = torch.from_numpy(image)
         data = data.to(torch.device("cuda"))
+        # data = data.to(torch.device("cpu"))
         output = model(data)  # 获取特征
         output = output.data.cpu().numpy()
         # print(output.shape)
@@ -104,6 +124,7 @@ def detect(save_img=False):
     arcface_model = DataParallel(arcface_model)
     # load_model(model, opt.test_model_path)
     arcface_model.load_state_dict(torch.load(Areface_weights), strict=False)
+    # arcface_model.load_state_dict(torch.load(Areface_weights, map_location=torch.device('cpu')), strict=False)
     arcface_model.to(device).eval()
 
     pred_model = AntiSpoofPredict(0)
@@ -233,8 +254,12 @@ def detect(save_img=False):
 
             # Stream results # 显示输出
             if view_img:
+                # 调整im0的大小为640*384
+                im0 = cv2.resize(im0, (640, 384))
                 cv2.imshow(p, im0)
+                pipe.stdin.write(im0.tostring())
                 if cv2.waitKey(1) == ord('q'):  # q to quit
+                    pipe.terminate()
                     raise StopIteration
 
             # Save results (image with detections)
@@ -273,6 +298,7 @@ if __name__ == '__main__':
     parser.add_argument('--iou-thres', type=float, default=0.5, help='IOU threshold for NMS')
     parser.add_argument('--fourcc', type=str, default='mp4v', help='output video codec (verify ffmpeg support)')
     parser.add_argument('--device', default='', help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
+    # parser.add_argument('--device', default='cpu', help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
     parser.add_argument('--view-img', action='store_true', help='display results')
     parser.add_argument('--save-txt', action='store_true', help='save results to *.txt')
     parser.add_argument('--classes', nargs='+', type=int, help='filter by class')

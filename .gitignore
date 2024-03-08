@@ -1,2 +1,14 @@
 #Pycharm specific
 .idea
+
+# python ignores
+*.pyc
+__pycache__/
+venv/
+
+.DS_Store
+
+*.pt
+*.pth
+
+pic/*
